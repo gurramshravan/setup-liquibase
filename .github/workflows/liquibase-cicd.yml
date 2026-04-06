@@ -1,21 +1,21 @@
-name: Database Migration
+name: Basic Usage
 on: [push, pull_request]
 
 jobs:
-  migrate:
+  test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    
-    - uses: liquibase/setup-liquibase@v2
-      with:
-        version: '4.32.0'
-        edition: 'community'
-        
-    - name: Run Liquibase Update
-      run: |
-        liquibase update \
-          --changelog-file=db/changelog/db.changelog-master.xml \
-          --url=jdbc:h2:mem:test \
-          --username=sa \
-          --password=
+      - uses: actions/checkout@v4
+      
+      - uses: liquibase/setup-liquibase@v2
+        with:
+          version: '5.0.1'
+          edition: 'community'
+      
+      - name: Run Liquibase Update
+        run: |
+          liquibase update \
+            --changelog-file=changelog.xml \
+            --url=jdbc:h2:mem:test \
+            --username=sa \
+            --password= 
