@@ -41,7 +41,7 @@ jobs:
         run: |
           liquibase update \
             --changelog-file=changelog.xml \
-            --url=jdbc:mysql://127.0.0.1:3306/my_test_db \
+            --url=jdbc:mysql://127.0.0.1:3306/mysql \
             --username=root \
             --password=root_password \
             --driver=com.mysql.cj.jdbc.Driver \
