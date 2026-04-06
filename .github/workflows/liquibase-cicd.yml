@@ -50,13 +50,13 @@ jobs:
 
       - name: Check Liquibase Tables
         run: |
-          mysql -h 127.0.0.1 -u root -proot_password my_test_db -e "SELECT * FROM DATABASECHANGELOG;"
+          mysql -h localhost -u root -proot_password mysql -e "SELECT * FROM DATABASECHANGELOG;"
           
       - name: Run Liquibase Update
         run: |
           liquibase update \
             --changelog-file=changelog.xml \
-            --url=jdbc:mysql://127.0.0.1:3306/my_test_db \
+            --url=jdbc:mysql://127.0.0.1:3306/mysql \
             --username=root \
             --password=root_password \
             --driver=com.mysql.cj.jdbc.Driver \
