@@ -8,8 +8,8 @@ jobs:
       mysql:
         image: mysql:8.0
         env:
-          MYSQL_ROOT_PASSWORD: root_password
-          MYSQL_DATABASE: my_test_db
+          MYSQL_ROOT_PASSWORD: Karizma@6640
+          MYSQL_DATABASE: mysql
         ports:
           - 3306:3306
         options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
@@ -27,12 +27,12 @@ jobs:
           version: '5.0.1'
           edition: 'community'
       
-      - name: Download MySQL JDBC Driver
+      - name: Download MySQL JDBC Driver into Liquibase lib
         run: |
-          mkdir -p drivers
-          curl -L -o drivers/mysql-connector-j.jar \
-          https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/8.0.33/mysql-connector-j-8.0.33.jar/maven2/mysql/mysql-connector-java/8.0.33/mysql-connector-java-8.0.33.jar
-
+          curl -L -o mysql-connector-j.jar \
+          https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/8.0.33/mysql-connector-j-8.0.33.jar
+          cp mysql-connector-j.jar /opt/hostedtoolcache/liquibase-community/5.0.1/x64/lib/
+    
       - name: Verify Driver File
         run: |
           ls -l drivers
@@ -45,7 +45,6 @@ jobs:
             --username=root \
             --password=root_password \
             --driver=com.mysql.cj.jdbc.Driver \
-            --classpath=drivers/mysql-connector-j.jar \
             --log-level=debug
         # run: |
         #   liquibase update \
