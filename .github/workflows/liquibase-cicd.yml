@@ -31,10 +31,12 @@ jobs:
         run: |
           curl -L -o mysql-connector-j.jar \
           https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.33/mysql-connector-java-8.0.33.jar
-
+          mkdir -p liquibase/lib
+          mv mysql-connector-j.jar liquibase/lib/
+          
       - name: Run Liquibase Update
         run: |
-          liquibase update \
+            liquibase update \
             --changelog-file=changelog.xml \
             --url=jdbc:mysql://127.0.0.1:3306/my_test_db \
             --username=root \
