@@ -48,6 +48,10 @@ jobs:
           https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/8.0.33/mysql-connector-j-8.0.33.jar
           cp mysql-connector-j.jar /opt/hostedtoolcache/liquibase-community/5.0.1/x64/lib/
 
+      - name: Check Liquibase Tables
+        run: |
+          mysql -h 127.0.0.1 -u root -proot_password my_test_db -e "SELECT * FROM DATABASECHANGELOG;"
+          
       - name: Run Liquibase Update
         run: |
           liquibase update \
