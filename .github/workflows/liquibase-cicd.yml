@@ -50,7 +50,7 @@ jobs:
 
       - name: Check Liquibase Tables
         run: |
-          mysql -h localhost -u root -proot_password mysql -e "SELECT * FROM DATABASECHANGELOG;"
+          mysql -u root -p mysql -e "SELECT * FROM DATABASECHANGELOG;"
           
       - name: Run Liquibase Update
         run: |
