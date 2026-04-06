@@ -2,55 +2,57 @@ name: Basic Usage
 on: [push, pull_request]
 
 jobs:
-  test-sql:
+  jobs:
+  liquibase:
     runs-on: ubuntu-latest
+
     services:
       mysql:
         image: mysql:8.0
         env:
-          # MYSQL_ROOT_PASSWORD: Karizma@6640
-          # MYSQL_DATABASE: mysql
           MYSQL_ROOT_PASSWORD: root_password
           MYSQL_DATABASE: my_test_db
         ports:
           - 3306:3306
-        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
-    steps:
-      - name: Connect and Run Query
-        run: mysql -h 127.0.0.1 -u root -proot_password -e "SHOW DATABASES;"
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot_password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
 
-  test:
-    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
+      - name: Install MySQL client
+        run: sudo apt-get update && sudo apt-get install -y mysql-client
+
+      - name: Wait for MySQL
+        run: |
+          for i in {1..20}; do
+            mysqladmin ping -h 127.0.0.1 -proot_password && break
+            echo "Waiting for MySQL..."
+            sleep 5
+          done
+
+      - name: Verify MySQL
+        run: |
+          mysql -h 127.0.0.1 -u root -proot_password -e "SHOW DATABASES;"
+
       - uses: liquibase/setup-liquibase@v2
         with:
           version: '5.0.1'
-          edition: 'community'
-      
-      - name: Download MySQL JDBC Driver into Liquibase lib
+
+      - name: Download MySQL Driver into Liquibase lib
         run: |
           curl -L -o mysql-connector-j.jar \
           https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/8.0.33/mysql-connector-j-8.0.33.jar
           cp mysql-connector-j.jar /opt/hostedtoolcache/liquibase-community/5.0.1/x64/lib/
-    
-      # - name: Verify Driver File
-      #   run: |
-      #     ls -l drivers
-          
-      - name: Run Liquibase Update
+
+      - name: Run Liquibase
         run: |
           liquibase update \
             --changelog-file=changelog.xml \
             --url=jdbc:mysql://127.0.0.1:3306/my_test_db \
             --username=root \
             --password=root_password \
-            --driver=com.mysql.cj.jdbc.Driver \
-            --log-level=debug
-        # run: |
-        #   liquibase update \
-        #     --changelog-file=changelog.xml \
-        #     --url=jdbc:h2:mem:test \
-        #     --username=sa \
-        #     --password= 
+            --driver=com.mysql.cj.jdbc.Driver
