@@ -8,8 +8,10 @@ jobs:
       mysql:
         image: mysql:8.0
         env:
-          MYSQL_ROOT_PASSWORD: Karizma@6640
-          MYSQL_DATABASE: mysql
+          # MYSQL_ROOT_PASSWORD: Karizma@6640
+          # MYSQL_DATABASE: mysql
+          MYSQL_ROOT_PASSWORD: root_password
+          MYSQL_DATABASE: my_test_db
         ports:
           - 3306:3306
         options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
@@ -41,7 +43,7 @@ jobs:
         run: |
           liquibase update \
             --changelog-file=changelog.xml \
-            --url=jdbc:mysql://127.0.0.1:3306/mysql \
+            --url=jdbc:mysql://127.0.0.1:3306/my_test_db \
             --username=root \
             --password=root_password \
             --driver=com.mysql.cj.jdbc.Driver \
