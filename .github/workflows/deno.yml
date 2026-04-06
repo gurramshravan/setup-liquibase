@@ -1,42 +1,215 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
+# CI/CD workflow for setup-liquibase GitHub Action
+# Fast feedback loop for code quality and basic functionality validation
+name: Continuous Integration
 
-# This workflow will install Deno then run `deno lint` and `deno test`.
-# For more information see: https://github.com/denoland/setup-deno
-
-name: Deno
-
+# Trigger workflow on pushes to main branch and all pull requests
 on:
   push:
-    branches: ["main"]
+    branches: [main]
   pull_request:
-    branches: ["main"]
+    branches: [main]
 
+# Minimal permissions for security
 permissions:
   contents: read
 
+# Cancel in-progress runs when new commits are pushed to the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  # Job: Code quality checks and build validation
+  code-quality-and-build:
+    name: Code Quality & Build
     runs-on: ubuntu-latest
-
+    
     steps:
-      - name: Setup repo
-        uses: actions/checkout@v4
+    # Checkout the repository code
+    - name: Checkout Repository
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    
+    # Setup Node.js environment with npm caching for faster builds
+    - name: Setup Node.js Environment
+      uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+      with:
+        node-version: '24'
+        cache: 'npm'
 
-      - name: Setup Deno
-        # uses: denoland/setup-deno@v1
-        uses: denoland/setup-deno@61fe2df320078202e33d7d5ad347e7dcfa0e8f31  # v1.1.2
-        with:
-          deno-version: v1.x
+    # Install all npm dependencies using package-lock.json for reproducible builds
+    - name: Install Dependencies
+      run: npm ci
+      env:
+        NODE_OPTIONS: --max-old-space-size=4096
+    
+    # Run security audit to check for vulnerabilities
+    - name: Run Security Audit
+      run: npm audit --audit-level=high
+      continue-on-error: true
+    
+    # Run ESLint to check code style and catch potential issues
+    - name: Run Code Linting
+      run: npm run lint
+    
+    # Execute unit tests to validate core functionality
+    - name: Run Unit Tests
+      id: unit-tests
+      run: npm run test:ci
+    
+    # Build the TypeScript action into a distributable JavaScript bundle
+    - name: Build Action Distribution
+      run: npm run build
+      env:
+        NODE_OPTIONS: --max-old-space-size=4096
+    
+    # Verify dist files are created correctly
+    - name: Verify Build Output
+      id: build-verification
+      run: |
+        if [ ! -f "dist/index.js" ]; then
+          echo "dist/index.js not found!"
+          exit 1
+        fi
+        if [ ! -f "dist/index.js.map" ]; then
+          echo "dist/index.js.map not found!"
+          exit 1
+        fi
+        echo "Build output verified successfully"
+        echo "status=success" >> $GITHUB_OUTPUT
 
-      # Uncomment this step to verify the use of 'deno fmt' on each commit.
-      # - name: Verify formatting
-      #   run: deno fmt --check
+  # Job: Basic functionality smoke test (Ubuntu only for speed)
+  smoke-test:
+    name: Smoke Test
+    needs: code-quality-and-build
+    runs-on: ubuntu-latest
+    
+    steps:
+    # Checkout the repository code
+    - name: Checkout Repository
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    
+    # Setup Node.js environment with npm caching
+    - name: Setup Node.js Environment
+      uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+      with:
+        node-version: '24'
+        cache: 'npm'
 
-      - name: Run linter
-        run: deno lint
+    # Install dependencies required for building the action
+    - name: Install Dependencies
+      run: npm ci
+      env:
+        NODE_OPTIONS: --max-old-space-size=4096
+    
+    # Build the action since smoke tests use the local action
+    - name: Build Action for Testing
+      run: npm run build
+      env:
+        NODE_OPTIONS: --max-old-space-size=4096
+    
+    # Test the actual setup-liquibase action with Community edition
+    - name: Test Liquibase Setup Action (Community)
+      id: setup-liquibase
+      uses: ./
+      with:
+        version: '5.0.1'
+        edition: 'community'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run tests
-        run: deno test -A
+    # Verify outputs are set correctly
+    - name: Verify Action Outputs
+      shell: bash
+      run: |
+        echo "Liquibase version: ${{ steps.setup-liquibase.outputs.liquibase-version }}"
+        echo "Liquibase path: ${{ steps.setup-liquibase.outputs.liquibase-path }}"
+        if [ -z "${{ steps.setup-liquibase.outputs.liquibase-version }}" ]; then
+          echo "liquibase-version output not set!"
+          exit 1
+        fi
+        if [ -z "${{ steps.setup-liquibase.outputs.liquibase-path }}" ]; then
+          echo "liquibase-path output not set!"
+          exit 1
+        fi
+
+    # Verify Liquibase is available in PATH
+    - name: Verify Liquibase in PATH
+      shell: bash
+      run: |
+        which liquibase
+        liquibase --version
+
+    # Quick database operation test
+    - name: Quick Database Test
+      shell: bash
+      run: |
+        liquibase update \
+          --changelog-file=changelog.xml \
+          --url=jdbc:h2:./smoke-test-db \
+          --username=sa \
+          --password=
+
+  # Job: Generate CI summary
+  ci-summary:
+    name: CI Summary
+    needs: [code-quality-and-build, smoke-test]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Generate CI Summary
+      run: |
+        echo "# 🚀 CI Pipeline Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Determine overall status
+        if [[ "${{ needs.code-quality-and-build.result }}" == "success" ]] && 
+           [[ "${{ needs.smoke-test.result }}" == "success" ]]; then
+          STATUS="✅ PASSED"
+          COLOR="green"
+        else
+          STATUS="❌ FAILED"
+          COLOR="red"
+        fi
+        
+        echo "## Overall Status: $STATUS" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        echo "| Job | Status | Purpose |" >> $GITHUB_STEP_SUMMARY
+        echo "|-----|--------|---------|" >> $GITHUB_STEP_SUMMARY
+        
+        if [[ "${{ needs.code-quality-and-build.result }}" == "success" ]]; then
+          echo "| Code Quality & Build | ✅ Passed | Linting, unit tests, build verification |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "| Code Quality & Build | ❌ Failed | Check logs for linting or build issues |" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [[ "${{ needs.smoke-test.result }}" == "success" ]]; then
+          echo "| Smoke Test | ✅ Passed | Basic functionality validation |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "| Smoke Test | ❌ Failed | Basic functionality issues detected |" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## Next Steps" >> $GITHUB_STEP_SUMMARY
+        if [[ "$STATUS" == "✅ PASSED" ]]; then
+          echo "- ✅ CI checks passed - ready for merge" >> $GITHUB_STEP_SUMMARY
+          echo "- 📋 For comprehensive testing, run the UAT workflow manually" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- ❌ Fix failing checks before merging" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔍 Review job logs for specific error details" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## Testing Coverage" >> $GITHUB_STEP_SUMMARY
+        echo "**CI Pipeline (this workflow):**" >> $GITHUB_STEP_SUMMARY
+        echo "- Code quality (linting, unit tests)" >> $GITHUB_STEP_SUMMARY
+        echo "- Build verification" >> $GITHUB_STEP_SUMMARY
+        echo "- Basic functionality (Ubuntu only)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**UAT Pipeline (separate workflow):**" >> $GITHUB_STEP_SUMMARY
+        echo "- Cross-platform testing (Ubuntu, Windows, macOS)" >> $GITHUB_STEP_SUMMARY
+        echo "- Real-world integration scenarios" >> $GITHUB_STEP_SUMMARY
+        echo "- Error handling and edge cases" >> $GITHUB_STEP_SUMMARY
+        echo "- Performance and installation validation" >> $GITHUB_STEP_SUMMARY
+        echo "- Secure edition testing" >> $GITHUB_STEP_SUMMARY
